@@ -73,7 +73,7 @@ def main(geo, year, current_year, option, sub_option, sub_option_value, sut_targ
         s_weight = None
         
     if (sub_option == "wage_max") : 
-        w_weight = None
+        w_weight = None 
         s_weight = None
         wage_max = int(sub_option_value)
         
@@ -136,7 +136,6 @@ def input_create(geo, year, sut_target, sdoh_score, pop_chronic_trend,  pop_chro
         
     f2f1 = prev_df['max_f2f_time']; f2f0 = prev_df['min_f2f_time']
     f2f = (f2f1 + f2f0)/5.0*sdoh_score.values
-    
     prev_demand = prev_df['rate_per_encounter'] * f2f * p_demand
     prev_service_name  = prev_df[['encounter_category','encounter_type', 'svc_category', 'svc_desc']]
     prev_ser_prv = prev_df[ provider_list['provider_abbr'] ]
@@ -274,7 +273,6 @@ def input_create_future(geo, year,current_year, sut_target, sdoh_score, pop_chro
         p_demand.append(t_demand) # frequency * population 
     f2f1 = prev_df['max_f2f_time']; f2f0 = prev_df['min_f2f_time'] 
     f2f = (f2f1 + f2f0)/5.0*sdoh_score.values
-    
     prev_demand = prev_df['rate_per_encounter'] * f2f * p_demand # rate_per_encounter
     prev_service_name  = prev_df[['encounter_category','encounter_type', 'svc_category', 'svc_desc']]
     prev_ser_prv = prev_df[ provider_list['provider_abbr'] ]
@@ -381,6 +379,7 @@ def input_create_future(geo, year,current_year, sut_target, sdoh_score, pop_chro
     wage = wage.loc[ provider_list['provider_abbr'] ]
     ser_prov = ser_prov[ provider_list['provider_abbr']  ]
     supply = supply.loc[ provider_list['provider_abbr'] ]
+
     return wage, ser_prov, demand, supply, overhead_work,  provider_list, service_name
 
 #=============================================================================
@@ -398,6 +397,7 @@ def resource_allocation(option, sub_option, wage, ser_prov, demand, supply, over
     for i in range( n_ser ):# service
         for m in provider_list['provider_abbr']:
             max_val  = (ser_prov.loc[i, m] <= 1) * demand.loc[i,'demand'] 
+            
             ser_max.loc[i,m] = max_val 
 
     #====== optimization 
@@ -485,29 +485,24 @@ def resource_allocation(option, sub_option, wage, ser_prov, demand, supply, over
             p = ser_prov.apply(lambda x: ''.join( ((x <=1 )*1).astype('str') ), axis = 1)
             k2 = k2 + p
             df = pd.concat([k, k1, k2], axis = 1); df.columns = ['d_type','category','comb']
-            k1 = df.groupby(["comb"]).size(); n_mem = len(k1) 
-        
+            k1 = df.groupby(["comb"]).size(); n_mem = len(k1)
             # create assignment 
             ser_prov_mem = pd.DataFrame(index=range( len(ser_prov) ),columns=['mem'])
             for i in range( n_mem ):
-                ser_prov_mem.loc[ df['comb'] == k1.keys()[i] ] = i        
-         
+                ser_prov_mem.loc[ df['comb'] == k1.keys()[i] ] = i 
             # total Demand    
             demand_mem = pd.DataFrame(index=range(n_mem),columns=['demand'])
             for k1 in range(n_mem):
                 g = demand.loc[ ser_prov_mem['mem'] == k1 , :].apply(sum, axis = 0)
                 demand_mem.iloc[k1,:] = g
-            
-                
             ser_max_mem = pd.DataFrame(index=range(n_mem),columns=provider_list['provider_abbr'])
             for k1 in range(n_mem):
                 max_val  = ser_max.loc[ ser_prov_mem['mem'] == k1, : ].apply(sum, axis = 0) 
                 ser_max_mem.iloc[k1,:] = max_val
-            
             dataset, current_demand = \
             call_assign_service(demand_mem, ser_max_mem, supply, overhead_work, provider_list, FTE_time)
-   
             time_allocation = pd.DataFrame(index=range(n_ser),columns=provider_list['provider_abbr'])
+            #k1 = df.groupby(["comb"]).size()
             for k1 in range(n_mem):
                 tmp =  ser_prov_mem['mem'] == k1; n = sum(tmp)
                 if( sum(tmp) == 1 ):
@@ -519,6 +514,7 @@ def resource_allocation(option, sub_option, wage, ser_prov, demand, supply, over
                     for j in range(n):
                         time_allocation.loc[ np.where(tmp)[0][j], :] = i.iloc[:,j]  
             dataset = time_allocation
+            dataset = pd.concat([service_name, dataset], axis = 1)
         else: # not collapsing
             dataset, current_demand = \
             call_assign_service(demand, ser_max, supply, overhead_work, provider_list, FTE_time)
@@ -538,7 +534,7 @@ def call_opt_ideal_maxbudget(option, wage_max, wage, ser_prov, demand, supply, s
     '''
     core LP to optimize the allocation by wage or priority --- find something that using grid search
     '''
-    total_wage = []; total_sutab = []; d=[]; detail_result=[]; 
+    total_wage = []; total_sutab = []; detail_result=[]; 
     v = np.arange(0, 1.01, 0.1); w_weight = None; s= None
     for i in v:
         wi_weight = i; si_weight = 1- i; 
@@ -564,8 +560,7 @@ def call_opt_ideal_maxbudget(option, wage_max, wage, ser_prov, demand, supply, s
     if(s == None): 
         if( wage_max < min(total_wage) ):
             s = 'Try higher maximum wage. Available minimum/maximum wage to minimize wage or minimize \
-            sutability score is:' +round(min(total_wage)).astype(str)+ ' and '+  round(max(total_wage)).astype(str)
-            print(s)
+            sutability score is:' +min(total_wage).round().astype(str)+ ' and '+  max(total_wage).round().astype(str)
     else: wage_max = 0
     
     if( wage_max >= min(total_wage) ):
@@ -669,8 +664,8 @@ def call_assign_service(demand_mem, ser_max_mem, supply, overhead_work, provider
     h1 = np.repeat(0, n_provider*n_mem)
     h2 = ser_max_mem.values.reshape(1,n_provider*n_mem).astype(float); h2=h2[0]
     h3 = h2==0; 
-    g01 = g1[h3,:]; g02 = g2[h3,:]
-    h01 = h1[h3]; h02 = h2[h3]
+    g02 = g2[h3,:]
+    h02 = h2[h3]
     h3 = h2 != 0; 
     g11 = g1[h3,:]; g12 = g2[h3,:]
     h11 = h1[h3]; h12 = h2[h3]
@@ -742,7 +737,8 @@ def call_opt_ideal(w_weight, s_weight, wage, ser_prov, demand, ser_max, row_i, c
         m =  m.replace( ')' , "")
         m = m.split(',')
         dataset.iloc[ int(m[0]), int(m[1]) ] = v.varValue
-        tt = tt + v.varValue            
+        tt = tt + v.varValue
+          
     return dataset, tt
 
 #=============================================================================
@@ -822,7 +818,8 @@ def summaryout(out, sub_option):
             df = pd.concat([df1,df2, df3], axis = 1)
     else: df = out
     return df
-    
+  
+#added figsize & savefig
 def plotall(thisweight, s, supply, option, sub_option, provider_list):
     # plot the output from main functions
     current_supply =  supply['provider_num']
@@ -845,7 +842,8 @@ def plotall(thisweight, s, supply, option, sub_option, provider_list):
             plot_supply_demand(s['FTE'], current_supply)
 
 def plot_wage_sutability(total_wage, total_sutab):
-    fig, ax1 = plt.subplots()
+    fig, ax1 = plt.subplots(figsize = (12, 6))
+    #fig, ax1 = plt.subplots()
     color = 'tab:red'
     ax1.set_xlabel('Weight of Wage (or 1-Weight of Priority)')
     ax1.set_ylabel('Total Wage (unit = 1000$)', color=color)
@@ -859,30 +857,44 @@ def plot_wage_sutability(total_wage, total_sutab):
     ax2.plot(t, total_sutab, color=color)
     ax2.tick_params(axis='y', labelcolor=color)             
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
-    plt.show()    
+    plt.show()
+    #fig.savefig('path/wage_suit.png');plt.close(fig)   
 
 
 def plot_supply_demand(current_demand, current_supply):
     p = pd.concat([current_demand, current_supply], axis = 1)
     p.columns = ['current_needs','current_supply']
-    p.plot(kind='bar') # supply demand plot
+    p.plot(kind='bar', figsize = (12, 6)) # supply demand plot
+    #p.plot(kind='bar')
     plt.title('Needs vs. Supply')
+    fig = plt.gcf() #get reference to current figure
     plt.show()
+    #fig.savefig('path/need_supply.png');plt.close(fig)
     
     
 def plot_provider_by_service(detail_result, providerlist):    
     p = detail_result.groupby('svc_category')[providerlist].sum()
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize = (12, 6))
+    #fig, ax = plt.subplots()
     p.T.plot(kind='bar',stacked=True, ax=ax, width=0.4)
-    ax.legend(loc='center left',bbox_to_anchor=(1, 0.5))
+    lgd = ax.legend(loc='center left',bbox_to_anchor=(1, 0.5))
+    #ax.legend(loc='center left',bbox_to_anchor=(1, 0.5))
     plt.title('F2F Service allocation by provider type (Min)')
     plt.show()
+    #fig.savefig('path/provider_service.png', bbox_extra_artists=(lgd,), bbox_inches='tight');plt.close(fig)
 
 
 def plot_service_by_provider(detail_result, providerlist):
     p = detail_result.groupby('svc_category')[providerlist].sum()
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize = (12, 6))
+    #fig, ax = plt.subplots()
     p.plot(kind='bar',stacked=True, ax=ax, width=0.4)
-    ax.legend(loc='center left',bbox_to_anchor=(1, 0.5))
+    lgd = ax.legend(loc='center left',bbox_to_anchor=(1, 0.5))
+    #ax.legend(loc='center left',bbox_to_anchor=(1, 0.5))
     plt.title('F2F Service allocation by service type (Min)')
     plt.show()
+    #fig.savefig('path/service_provider.png', bbox_extra_artists=(lgd,), bbox_inches='tight');plt.close(fig)
+
+
+
+
